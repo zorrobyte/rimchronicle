@@ -17,6 +17,8 @@ class FakeBridge:
     def __init__(self, seed: str = "test-seed", start_tick: int = 1000):
         self.seed = seed
         self.start_tick = start_tick
+        self.world_uid_value: str | None = None     # older bridges report none; a real one is unique per world
+        self.names = ["Kena", "Lumi", "Kat"]
         self.online = True
         self.state = "playing"
         self.tick = 60000
@@ -45,9 +47,13 @@ class FakeBridge:
         self.tick += 60000
         self.add("day", f"day {self.day}", data={"colonists": self.colonists, "day": self.day})
 
-    def new_game(self, seed: str, start_tick: int) -> None:
+    def new_game(self, seed: str, start_tick: int, world_uid: str | None = None, names: list[str] | None = None) -> None:
         self.seed, self.start_tick = seed, start_tick
         self.tick, self.day, self.hour = 100, 0, 6
+        self.world_uid_value = world_uid
+        if names is not None:
+            self.names = list(names)
+            self.colonists = len(names)
         self.ledger = []
         self.add("game", "new game started")
 
@@ -84,7 +90,7 @@ class FakeBridge:
             return {"colonists": self.colonists, "downed": 0, "prisoners": 0, "animals": 1, "wealth": 12000, "mood_avg": 55, "food_days": 4.5, "nutrition": 21.6, "threat_points": 80, "danger": "None", "day": self.day, "hour": self.hour, "date": f"day {self.day} of Aprimay", "season": "Spring", "weather": "Clear", "temp_outdoor": 21, "biome": "TemperateForest", "home_center": [120, 115], "research_current": "Smithing", "research_progress": 40,
                     "alerts": list(self.alerts), "hostiles": list(self.hostiles)}
         if method == "state.pawns":
-            return [{"id": f"Human{i + 1}", "name": n, "pos": [118 + i, 117], "top_skills": "Shooting 8, Mining 6", "weapon": "Bolt-action rifle", "mood": 60, "health": 100, "job": "hauling"} for i, n in enumerate(("Kena", "Lumi", "Kat")[: self.colonists])]
+            return [{"id": f"Human{i + 1}", "name": n, "pos": [118 + i, 117], "top_skills": "Shooting 8, Mining 6", "weapon": "Bolt-action rifle", "mood": 60, "health": 100, "job": "hauling"} for i, n in enumerate(self.names[: self.colonists])]
         if method == "state.pawn":
             name = str((params or {}).get("pawn", ""))
             who = {"Human1": "Kena", "Human2": "Lumi", "Human3": "Kat"}.get(name, name)
@@ -115,6 +121,10 @@ class FakeBridge:
                 return "Anditeria"
             if "TicksAbs" in path:
                 return self.start_tick + self.tick
+            if "persistentRandomValue" in path:
+                if self.world_uid_value is None:
+                    raise BridgeError("no such member")
+                return self.world_uid_value
         if method == "game.status":
             return self.status()
         raise BridgeError(f"unknown method {method}")
@@ -135,6 +145,9 @@ class FakeBridge:
 
     def game_start_tick(self) -> int | None:
         return self.start_tick
+
+    def world_uid(self) -> str | None:
+        return self.world_uid_value
 
 
 class FakeLLM:

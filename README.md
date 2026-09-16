@@ -67,7 +67,7 @@ RimWorld + RimBridge  --/events, /rpc, /screenshot-->  watcher --> camera --> na
                                               web UI (FastAPI + SSE, port 8771) reads the same files
 ```
 
-A chapter is due on a dramatic event (a death, a raid, a fire, a lover, a lost limb, someone joining or leaving), on a finished in-game day with at least `min_events` notable events, after `max_hours_between` in-game hours, as an opening when a colony is first seen, and as a closing chapter with an epitaph when every colonist is gone or the game is left; never more often than `min_real_seconds_between` real seconds. A game is identified by its world seed plus its start tick, so a new game opens a new book and a reloaded save resumes the old one. Books are titled by the settlement's name.
+A chapter is due on a dramatic event (a death, a raid, a fire, a lover, a lost limb, someone joining or leaving), on a finished in-game day with at least `min_events` notable events, after `max_hours_between` in-game hours, as an opening when a colony is first seen, and as a closing chapter with an epitaph when every colonist is gone or the game is left; never more often than `min_real_seconds_between` real seconds. A game is identified by its world seed, its start tick and the world's own random id, so a new game opens a new book and a reloaded save resumes the old one; two colonies started from the same seed stay two books, and a roster with nobody in common with the one last seen is treated as a new game even if all three agree. Books are titled by the settlement's name.
 
 ## Configuration
 
