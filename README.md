@@ -6,7 +6,11 @@ It does not care who is playing. A human at the keyboard and an AI agent driving
 
 ## Screenshots
 
-*Placeholder: the library view (one card per colony, cover image from the latest chapter) and the reader view (chapter image, serif prose, the sticky "State of the colony" strip).*
+<p align="center"><img src="docs/reader.png" width="900" alt="RimChronicle reader: a chapter with the base photographed from above"></p>
+
+| Library | Reader, light theme |
+|---|---|
+| <img src="docs/library.png" width="440"> | <img src="docs/reader-light.png" width="440"> |
 
 ## Quick start
 
