@@ -16,6 +16,7 @@ llm:
   disable_thinking: true         # sends chat_template_kwargs.enable_thinking=false (Qwen-style servers)
 
 narrator:
+  voice: storyteller             # see rimchronicle/voices.py; a chronicle can override it
   min_events: 4                  # a finished day with at least this many notable events earns a chapter
   max_hours_between: 24          # write at least every N in-game hours
   min_real_seconds_between: 120  # never write more often than this in real seconds
