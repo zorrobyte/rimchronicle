@@ -34,7 +34,7 @@ def test_voices_and_settings(cfg, bridge, llm):
     assert all(v["name"] and v["blurb"] and v["sample"] for v in vs)
     s = c.get("/api/settings").json()
     assert s["llm"]["api_key"].startswith("••") and s["llm"]["api_key"].endswith("42") and "secret" not in s["llm"]["api_key"]
-    assert s["narrator"]["voice"] == "chronicler" and len(s["voices"]) == 9 and s["storage"]
+    assert s["narrator"]["voice"] == "storyteller" and len(s["voices"]) == 9 and s["storage"]
     # a partial PUT changes only what it names; the masked key sent back is ignored
     s2 = c.put("/api/settings", json={"narrator": {"voice": "gazette", "min_events": "5"}, "llm": {"api_key": s["llm"]["api_key"]}, "web": {"port": 1}}).json()
     assert s2["narrator"]["voice"] == "gazette" and s2["narrator"]["min_events"] == 5 and s2["llm"]["api_key"].endswith("42")
@@ -61,7 +61,7 @@ def test_timeline_and_people_endpoints(cfg, bridge, llm):
     fr = [x for x in t["items"] if x["kind"] == "frame"]
     assert {"incident", "base"} <= {x["shot"] for x in fr} and all(x["file"].endswith(".jpg") for x in fr)
     ch = next(x for x in t["items"] if x["kind"] == "chapter")
-    assert ch["k"] == 1 and ch["voice"] == "chronicler"
+    assert ch["k"] == 1 and ch["voice"] == "storyteller"
     # paging with since, and a kinds filter
     t2 = c.get(f"/api/chronicles/{gid}/timeline", params={"since": t["next"]}).json()
     assert t2["items"] == [] and t2["next"] == t["next"]
@@ -89,7 +89,7 @@ def test_write_options_and_chronicle_settings(cfg, bridge, llm):
     eng.step()
     gid = eng.watcher.chronicle.id
     chron = eng.watcher.chronicle
-    assert chron.chapters[0].voice == "chronicler"
+    assert chron.chapters[0].voice == "storyteller"
     # the settings PUT changes the default voice for the next chapter
     c.put("/api/settings", json={"narrator": {"voice": "gazette"}})
     assert c.post(f"/api/chronicles/{gid}/write").json()["ok"]
@@ -129,7 +129,7 @@ def test_rewrite_keeps_versions(cfg, bridge, llm):
     assert r.status_code == 200 and r.json() == {"ok": True, "k": 1, "voice": "saga"}
     eng.step()
     ch = c.get(f"/api/chronicles/{gid}").json()["chapters"][0]
-    assert ch["voice"] == "saga" and len(ch["versions"]) == 1 and ch["versions"][0]["voice"] == "chronicler"
+    assert ch["voice"] == "saga" and len(ch["versions"]) == 1 and ch["versions"][0]["voice"] == "storyteller"
     assert llm.temperatures[-1] == 0.8
     assert len(c.get(f"/api/chronicles/{gid}").json()["chapters"]) == 1
     # a chronicle that is not the live game can still be rewritten (it is loaded from the store)
@@ -139,7 +139,7 @@ def test_rewrite_keeps_versions(cfg, bridge, llm):
     assert c.post(f"/api/chronicles/{gid}/chapters/1/rewrite", json={"voice": "noir"}).status_code == 200
     eng.step()
     ch = c.get(f"/api/chronicles/{gid}").json()["chapters"][0]
-    assert ch["voice"] == "noir" and [v["voice"] for v in ch["versions"]] == ["chronicler", "saga"]
+    assert ch["voice"] == "noir" and [v["voice"] for v in ch["versions"]] == ["storyteller", "saga"]
 
 
 def test_export_has_people_and_days(cfg, bridge, llm):
@@ -150,7 +150,7 @@ def test_export_has_people_and_days(cfg, bridge, llm):
     html = render_book(eng.store.load(gid), eng.store)
     assert "The people of Aswell" in html and "Kena" in html and "Caravan child, then bounty hunter." in html and "Abrasive" in html
     assert "<h1>Aswell</h1>" in html and "of the faction Anditeria, seed test-seed" in html
-    assert "The Chronicler" in html
+    assert "The Storyteller" in html
     assert 'id="days"' in html and "<figcaption>day 3</figcaption>" in html
     book = c.get(f"/api/chronicles/{gid}/book")
     assert book.status_code == 200 and "The people of Aswell" in book.text

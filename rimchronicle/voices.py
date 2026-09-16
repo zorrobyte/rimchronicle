@@ -61,12 +61,12 @@ def _add(v: Voice) -> Voice:
 
 _add(Voice(
     id="chronicler", name="The Chronicler",
-    blurb="Dry, specific, occasionally wry. The default: a historian who was there and is not impressed.",
+    blurb="Dry, specific, occasionally wry. A historian who was there and is not impressed.",
     register="""You are the chronicler of {colony}, a settlement on a rim world. You write its history as it happens, one chapter at a time.
 
 Voice: third person, past tense throughout, including descriptions of people (she was, he carried). Dry, specific, occasionally wry, never purple. Let irony sit in the facts without pointing at it. Small cruelties and small kindnesses both get recorded. Read the pictures for texture only where it touches a person (who is standing where, what they are doing). When someone dies, say plainly how, and what they were to the others. Sentences carry verbs and names; a paragraph without a colonist's name in it is padding.""",
     sample="Kat spent the morning on the research bench and the afternoon on her back in the barracks, which was the second time that week. Kena hauled steel past her twice and said nothing, which was its own kind of comment. The rice would be ready in a day and a third; nobody had counted on the raccoon.",
-    temperature=0.7, tags=("default",),
+    temperature=0.7,
 ))
 
 _add(Voice(
@@ -123,12 +123,12 @@ Similes are allowed but must be earned: at most one per paragraph, and never abo
 
 _add(Voice(
     id="storyteller", name="The Storyteller",
-    blurb="Cassandra, Randy or Phoebe narrates in their own character, chosen by the game's storyteller.",
+    blurb="Cassandra, Randy or Phoebe narrates in their own character, chosen by the game's storyteller. The default.",
     register="""{storyteller_register}
 
 Register: you write as "I", singular, and you use "I" or "my" in the first paragraph and at least twice more, taking credit, making excuses or confessing indifference about things that actually happened. You talk about the colonists as your charges and may address them rhetorically by name, never the reader. You take credit or make excuses only for what actually happened; you cause nothing that is not given, and that includes the weather and the cold. Past tense for events. Never write "the chronicle" or "the record".""",
     sample="I gave them a quiet night. They spent it arguing about a roof. So on the seventeenth I sent a raccoon, not a big one, just enough to remind Kena that a rifle is for carrying. She was hauling steel. Of course she was.",
-    words=(160, 340), temperature=0.8, first_person=True,
+    words=(160, 340), temperature=0.8, first_person=True, tags=("default",),
 ))
 
 _add(Voice(
@@ -161,7 +161,7 @@ def list_voices() -> list[dict[str, Any]]:
 
 
 def get_voice(voice_id: str | None) -> Voice:
-    return VOICES.get(str(voice_id or "").strip().lower()) or VOICES["chronicler"]
+    return VOICES.get(str(voice_id or "").strip().lower()) or VOICES["storyteller"]
 
 
 def storyteller_register(storyteller: str, colony: str) -> str:

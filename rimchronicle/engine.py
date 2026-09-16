@@ -254,7 +254,7 @@ class Engine:
             "online": w.online, "game": {k: w.status.get(k) for k in ("state", "seed", "day", "hour", "date", "colonists", "storyteller", "paused")},
             "chronicle": chron.id if chron else None, "colony": chron.title if chron else None, "pending_events": len(w.pending), "days_since_chapter": w.days_since_chapter,
             "writing": self.narrator.busy, "last_error": self.narrator.last_error, "overseer": self.overseer.reachable,
-            "voice": (chron.voice if chron and chron.voice else ncfg.get("voice", "chronicler")), "default_voice": ncfg.get("voice", "chronicler"),
+            "voice": (chron.voice if chron and chron.voice else ncfg.get("voice", "storyteller")), "default_voice": ncfg.get("voice", "storyteller"),
             "state": chron.last_state if chron else {}, "threads": w.threads,
             "camera": {"since_chapter": self.camera.count_since_chapter, "pending": len(self.camera.pending), "error": self.camera.last_error},
             "next_allowed_in": max(0.0, (self.narrator.last_write_t + float(ncfg.get("min_real_seconds_between", 120))) - time.time()) if self.narrator.last_write_t else 0.0,
