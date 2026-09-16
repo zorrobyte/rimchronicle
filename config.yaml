@@ -1,0 +1,38 @@
+# RimChronicle configuration. Put private overrides (your real LLM endpoint) in config.local.yaml,
+# which is gitignored and deep-merged on top of this file.
+bridge:
+  url: http://127.0.0.1:8765     # RimBridge, the RimWorld mod's loopback HTTP server
+  poll_seconds: 2                # how often /events is polled
+  state_refresh_seconds: 20      # how often state.summary and the roster are refreshed
+  timeout_s: 15
+
+llm:
+  base_url: http://127.0.0.1:8000/v1   # any OpenAI-compatible chat endpoint with vision
+  model: Qwen/Qwen3-VL-32B
+  api_key: not-needed
+  timeout_s: 240
+  max_tokens: 1200
+  temperature: 0.7
+  disable_thinking: true         # sends chat_template_kwargs.enable_thinking=false (Qwen-style servers)
+
+narrator:
+  min_events: 4                  # a finished day with at least this many notable events earns a chapter
+  max_hours_between: 24          # write at least every N in-game hours
+  min_real_seconds_between: 120  # never write more often than this in real seconds
+  opening_chapter: true          # write an introduction as soon as a colony is first seen
+  base_width_cells: 50           # the wide shot of the base
+  event_width_cells: 30          # the close shot of the event cell
+  label_anchors: false           # draw anchor names on images when anchors exist
+  grid: false                    # draw a faint 10-cell grid on images
+
+overseer:
+  enabled: true                  # quote an AI agent's step notes if its dashboard is reachable
+  url: http://127.0.0.1:8770
+  poll_seconds: 5
+
+web:
+  host: 127.0.0.1
+  port: 8771
+
+storage:
+  dir: chronicles
