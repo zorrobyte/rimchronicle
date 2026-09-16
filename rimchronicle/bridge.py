@@ -86,6 +86,19 @@ class Bridge:
         except BridgeError:
             return None
 
+    def world_uid(self) -> str | None:
+        """A value generated with the world and saved with it, so two games that share a seed string
+        (an agent replaying a fixed seed list starts many unrelated colonies under one seed) still get
+        different chronicle ids, while reloading the same save keeps the same one. None if the bridge
+        or the game version does not expose it."""
+        try:
+            v = self.rpc("engine.get", {"path": "Find.World.info.persistentRandomValue", "depth": 1})
+        except BridgeError:
+            return None
+        if isinstance(v, (int, str)) and str(v).strip() not in ("", "0", "None"):
+            return str(v).strip()
+        return None
+
     def game_start_tick(self) -> int | None:
         """Absolute tick the game world started at; constant across saves of the same game."""
         try:

@@ -250,6 +250,10 @@ class Narrator:
         now = self.clock()
         if now < self.retry_after:
             return None
+        if chron.status != "ended":
+            # The watcher re-opened this book (a new game, or the same one played on), so the
+            # in-memory "this one is finished" latch must not outlive it.
+            self._ended_ids.discard(chron.id)
         ncfg = self.cfg
         closing = None
         if w.colony_wiped:

@@ -152,6 +152,25 @@ def compact_roster(pawns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def roster_names(roster: list[dict[str, Any]]) -> list[str]:
+    """The colonist names in a roster, for telling one colony from another."""
+    return [str(p.get("name")).strip() for p in roster if str(p.get("name") or "").strip()]
+
+
+def rosters_diverged(known: list[str], observed: list[str]) -> bool:
+    """True when two rosters cannot be the same colony a little later.
+
+    Colonies lose and gain people all the time, so anything that still shares a name is the same
+    colony. Zero overlap between two non-empty rosters means the colony underneath was replaced
+    wholesale -- a different playthrough that happened to compute the same chronicle id.
+    """
+    a = {n.casefold() for n in known if n}
+    b = {n.casefold() for n in observed if n}
+    if not a or not b:
+        return False        # nothing recorded yet, or nobody alive to compare with: never guess
+    return not (a & b)
+
+
 def open_threads(summary: dict[str, Any] | None) -> list[str]:
     """Unresolved tensions the narrator can build suspense on: alerts, hostiles, quests, letters, low stocks."""
     if not summary:
@@ -207,6 +226,7 @@ class Watcher:
         self._last_state_refresh = 0.0
         self._last_tick = -1
         self._needs_identify = True
+        self._legacy_id = ""            # the id this game would have had before world ids joined it
         self._was_playing = False
         self._last_error = ""
 
@@ -298,18 +318,83 @@ class Watcher:
                 start_tick = abs_tick - int(self.status.get("tick") or 0)
             except Exception:  # noqa: BLE001
                 start_tick = None
-        gid = make_game_id(seed, start_tick)
+        world_uid = None
+        try:
+            world_uid = self.bridge.world_uid()  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            world_uid = None
+        gid = make_game_id(seed, start_tick, world_uid)
+        self._legacy_id = make_game_id(seed, start_tick)
         self._needs_identify = False
-        if gid == self.game_id and self.chronicle is not None:
+        # The id agreeing is never on its own proof that this is the same game: an id can still
+        # collide (an old chronicle from before world ids, or a bridge that cannot report one), so
+        # ask the map who is alive down there before deciding nothing has changed. Identifying is
+        # rare -- a reconnect, a "game" event, a tick that went backwards -- so the extra call is cheap.
+        names = self._observed_names()
+        if gid == self.game_id and self.chronicle is not None and not rosters_diverged(self.chronicle.last_roster, names):
+            self._same_game_again(names)
             return
-        self._open_chronicle(gid, seed)
+        self._open_chronicle(gid, seed, names)
 
-    def _open_chronicle(self, gid: str, seed: str) -> None:
+    def _same_game_again(self, names: list[str]) -> None:
+        """Re-identified as the game we are already watching, e.g. because its save was reloaded.
+
+        The "the game was left" and "the colony is gone" latches are only true until the game comes
+        back; left standing they make the narrator read every later tick as the ending it has already
+        written, and the book never takes another chapter.
+        """
+        chron = self.chronicle
+        alive = bool(names)
+        if chron is not None and alive:
+            chron.last_roster = names
+        if not self.game_left and not (self.colony_wiped and alive):
+            return
+        self.game_left = False
+        if alive:
+            self.colony_wiped = False
+        if chron is not None and chron.status == "ended" and alive:
+            chron.status = "running"
+            self.store.save(chron)
+            log.info("chronicle %s continues: the same game is being played again", chron.id)
+
+    def _observed_names(self) -> list[str]:
+        """The colonist names on the map right now, fetched fresh (the cached roster belongs to whatever chronicle was open before)."""
+        try:
+            pawns = self.bridge.rpc("state.pawns", {"filter": "colonists"})
+        except BridgeError:
+            return []
+        return roster_names(compact_roster(pawns)) if isinstance(pawns, list) else []
+
+    def _free_id(self, gid: str) -> str:
+        """`gid`, or the next free `gid-2`, `gid-3`... when a different colony already owns it."""
+        if not self.store.exists(gid):
+            return gid
+        for n in range(2, 100):
+            cand = f"{gid}-{n}"
+            if not self.store.exists(cand):
+                return cand
+        return f"{gid}-{int(self.clock())}"
+
+    def _open_chronicle(self, gid: str, seed: str, names: list[str] | None = None) -> None:
         previous = self.game_id
-        if self.store.exists(gid):
-            chron = self.store.load(gid)
-            resumed = True
-        else:
+        names = self._observed_names() if names is None else names
+        chron, resumed = None, False
+        for cand, legacy in self._candidates(gid):
+            if not self.store.exists(cand):
+                continue
+            c = self.store.load(cand)
+            if rosters_diverged(c.last_roster, names):
+                log.info("not resuming chronicle %s: its colony was %s, this one is %s", cand, c.last_roster, names)
+                continue
+            if legacy and c.status == "ended":
+                # An id from before world ids: an ended chronicle under it is as likely to be a dead
+                # colony that shared this seed as it is to be this game. Start a fresh book instead.
+                log.info("not resuming ended legacy chronicle %s for a new game", cand)
+                continue
+            chron, resumed = c, True
+            break
+        if chron is None:
+            gid = self._free_id(gid)
             chron = Chronicle(id=gid, seed=seed)
             chron.started = datetime.now(timezone.utc).isoformat(timespec="seconds")
             chron.started_day = int(self.status.get("day") or 0)
@@ -320,7 +405,9 @@ class Watcher:
                 chron.scenario = self.bridge.scenario_name() or ""  # type: ignore[attr-defined]
             except Exception:  # noqa: BLE001
                 chron.scenario = ""
-            resumed = False
+        gid = chron.id
+        if names:
+            chron.last_roster = names
         if not chron.name or not chron.faction:
             self._name_colony(chron)
         if chron.status == "ended":
@@ -339,6 +426,14 @@ class Watcher:
         log.info("%s chronicle %s (%s, %s)", "resumed" if resumed else "new", gid, chron.title, seed)
         self.emit("chronicle", {"id": gid, "resumed": resumed, "previous": previous})
         self._record("chronicle", {"resumed": resumed, "name": chron.name, "seed": seed}, self.status.get("day"), self.status.get("hour"))
+
+    def _candidates(self, gid: str) -> list[tuple[str, bool]]:
+        """Chronicle ids this game may already own: its own, then the pre-world-id form of it."""
+        out = [(gid, False)]
+        legacy = getattr(self, "_legacy_id", "")
+        if legacy and legacy != gid:
+            out.append((legacy, True))
+        return out
 
     def _name_colony(self, chron: Chronicle, force: bool = False) -> bool:
         """Settlement and faction names, so the book is 'Aswell' rather than a seed. Best effort; returns True if something changed."""
@@ -432,10 +527,24 @@ class Watcher:
                     log.exception("timeline state sample failed")
         try:
             pawns = self.bridge.rpc("state.pawns", {"filter": "colonists"})
-            if isinstance(pawns, list):
-                self.roster = compact_roster(pawns)
         except BridgeError as e:
             self._note_error(f"state.pawns: {e}")
+            return
+        if not isinstance(pawns, list):
+            return
+        self.roster = compact_roster(pawns)
+        names = roster_names(self.roster)
+        chron = self.chronicle
+        if chron is None or not names:
+            return
+        if rosters_diverged(chron.last_roster, names):
+            # Every colonist was replaced between two refreshes: this is another playthrough wearing
+            # the same chronicle id, not the colony we were writing about.
+            log.warning("the colony changed completely (%s -> %s); re-identifying the game", chron.last_roster, names)
+            self._needs_identify = True
+            self._identify()
+        else:
+            chron.last_roster = names
 
     def anchors(self) -> list[dict[str, Any]]:
         try:

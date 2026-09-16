@@ -108,6 +108,143 @@ def test_new_game_detection_starts_a_new_chronicle(cfg, store, bridge, llm, cloc
     assert w.chronicle.id == first and len(w.chronicle.chapters) == 1
 
 
+def test_two_games_with_the_same_seed_and_start_tick_are_separate_chronicles(cfg, store, bridge, llm, clock):
+    """An agent replays a fixed list of seeds, so a dead colony and a fresh one share both the seed
+    string and the start tick of a fresh scenario. They must not become one book."""
+    bridge.new_game("rimagent-4", 20000, world_uid="111", names=["Tsuki", "Isamu", "Vargas"])
+    w, n = make(cfg, store, bridge, llm, clock)
+    w.tick()
+    n.write("opening")
+    first = w.chronicle.id
+    assert first == "rimagent-4-20000-111"
+    bridge.add("letter", "Old news")
+    w.tick()
+    bridge.new_game("rimagent-4", 20000, world_uid="222", names=["Gnat", "Lupa", "Rhod"])
+    w.tick()
+    assert w.chronicle.id == "rimagent-4-20000-222" != first
+    assert w.chronicle.chapters == [] and w.pending == []
+    assert store.load(first).chapters and store.load(first).last_roster == ["Tsuki", "Isamu", "Vargas"]
+
+
+def test_a_colliding_id_is_caught_by_the_roster(cfg, store, bridge, llm, clock):
+    """Even with no world id to tell them apart (an older bridge), a colony of strangers is a new game."""
+    bridge.new_game("rimagent-4", 20000, names=["Tsuki", "Isamu", "Vargas"])
+    w, n = make(cfg, store, bridge, llm, clock)
+    w.tick()
+    n.write("opening")
+    first = w.chronicle.id
+    assert first == "rimagent-4-20000"
+    bridge.add("letter", "Old news")
+    w.tick()
+    bridge.new_game("rimagent-4", 20000, names=["Gnat", "Lupa", "Rhod"])
+    w.tick()
+    assert w.chronicle.id != first, "a completely different colony must not continue the old chronicle"
+    assert w.chronicle.chapters == [] and w.chronicle.status == "running"
+    assert store.load(first).chapters and store.load(first).status == "running"
+
+
+def test_a_new_colony_is_not_blocked_by_the_old_ones_ending(cfg, store, bridge, llm, clock):
+    """The wipe ends one chronicle; the next game under the same ids still gets chapters."""
+    bridge.new_game("rimagent-4", 20000, names=["Tsuki", "Isamu", "Vargas"])
+    w, n = make(cfg, store, bridge, llm, clock)
+    w.tick()
+    n.write("opening")
+    dead = w.chronicle.id
+    bridge.colonists = 0
+    w.refresh_state()
+    clock.advance(200)
+    w.tick()
+    assert n.due().startswith("ending")
+    n.write(n.due())
+    assert store.load(dead).status == "ended"
+    # a second, unrelated colony under the same seed and start tick
+    bridge.add("letter", "Old news")
+    w.tick()
+    bridge.new_game("rimagent-4", 20000, names=["Gnat", "Lupa", "Rhod"])
+    w.tick()
+    assert w.chronicle.id != dead and w.chronicle.status == "running"
+    clock.advance(200)
+    assert n.due() == "opening"
+    assert n.write("opening").k == 1
+    assert store.load(w.chronicle.id).status == "running" and store.load(dead).status == "ended"
+
+
+def test_the_roster_is_rechecked_between_identifications(cfg, store, bridge, llm, clock):
+    """The colony can be swapped out without any signal the fast path looks at; the periodic state
+    refresh must still notice."""
+    w, n = make(cfg, store, bridge, llm, clock)
+    w.tick()
+    n.write("opening")
+    first = w.chronicle.id
+    assert w.chronicle.last_roster == ["Kena", "Lumi", "Kat"]
+    bridge.names = ["Gnat", "Lupa", "Rhod"]   # same seed, same tick, same ledger: only the people changed
+    w.refresh_state()
+    assert w.chronicle.id != first and w.chronicle.chapters == []
+    assert store.load(first).chapters, "the old book keeps its chapter"
+
+
+def test_reloading_the_same_save_continues_the_chronicle(cfg, store, bridge, llm, clock):
+    w, n = make(cfg, store, bridge, llm, clock)
+    w.tick()
+    n.write("opening")
+    gid = w.chronicle.id
+    bridge.state = "menu"
+    w.tick()
+    assert w.game_left
+    clock.advance(200)
+    assert n.due().startswith("ending")
+    n.write(n.due())
+    assert w.chronicle.status == "ended"
+    bridge.state = "playing"
+    w.tick()
+    assert w.chronicle.id == gid and not w.game_left and w.chronicle.status == "running"
+    bridge.add("colonist_died", "Kat died", cell=[100, 100])
+    clock.advance(200)
+    w.tick()
+    assert n.due().startswith("drama"), "the game came back, so the book is open again"
+    assert n.write(n.due()).k == 3
+
+
+def test_an_ended_chronicle_reopens_when_its_game_comes_back(cfg, store, bridge, llm, clock):
+    """An earlier save of the same colony is loaded after the wipe: the book reopens, and a second
+    ending can still be written."""
+    w, n = make(cfg, store, bridge, llm, clock)
+    w.tick()
+    n.write("opening")
+    gid = w.chronicle.id
+    bridge.colonists = 0
+    w.refresh_state()
+    clock.advance(200)
+    w.tick()
+    n.write(n.due())
+    assert w.chronicle.status == "ended" and n.due() is None
+    bridge.load_game("test-seed", 1000)      # the same game, rolled back to before the wipe
+    bridge.colonists = 3
+    clock.advance(200)
+    w.tick()
+    assert w.chronicle.id == gid and w.chronicle.status == "running" and not w.colony_wiped
+    bridge.colonists = 0
+    clock.advance(200)
+    w.refresh_state()
+    w.tick()
+    assert w.colony_wiped and n.due().startswith("ending"), "the second ending is not swallowed by the first"
+    assert n.write(n.due()).k == 3
+
+
+def test_a_legacy_chronicle_is_resumed_when_the_bridge_learns_world_ids(cfg, store, bridge, llm, clock):
+    w, n = make(cfg, store, bridge, llm, clock)
+    w.tick()
+    n.write("opening")
+    legacy = w.chronicle.id
+    assert legacy == "test-seed-1000"
+    bridge.world_uid_value = "999"            # the mod now reports one; the same game is still running
+    w.tick()
+    w._needs_identify = True
+    w._identify()
+    assert w.chronicle.id == legacy and len(w.chronicle.chapters) == 1
+    assert {c.id for c in store.list()} == {legacy}
+
+
 def test_bridge_down_and_back(cfg, store, bridge, llm, clock):
     w, n = make(cfg, store, bridge, llm, clock)
     bridge.online = False

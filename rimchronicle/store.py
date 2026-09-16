@@ -16,12 +16,23 @@ def safe_id(text: str) -> str:
     return SAFE.sub("-", text).strip("-") or "unnamed"
 
 
-def make_game_id(seed: str | None, start_tick: int | None) -> str:
-    """seed + start date. A new game with the same seed has a different start tick."""
+def make_game_id(seed: str | None, start_tick: int | None, world_uid: str | int | None = None) -> str:
+    """seed + start date + the world's own random id.
+
+    The seed alone is not an identity: an agent that replays a fixed list of seeds starts many
+    unrelated colonies under the same seed string, and two fresh games of the same scenario tend to
+    share a start tick as well (it comes from world generation, not the wall clock). `world_uid` is
+    whatever the bridge can offer that is generated per world and saved with it (see
+    `Bridge.world_uid`); it keeps two such games apart while still being stable across reloads of the
+    same save. It may be missing on older bridges, hence the legacy two-part id.
+    """
     seed = seed or "unknown-seed"
-    if start_tick is None:
-        return safe_id(seed)
-    return safe_id(f"{seed}-{start_tick}")
+    parts = [seed]
+    if start_tick is not None:
+        parts.append(str(start_tick))
+    if world_uid not in (None, ""):
+        parts.append(str(world_uid))
+    return safe_id("-".join(parts))
 
 
 @dataclass
@@ -86,6 +97,7 @@ class Chronicle:
     last_seq: int = 0            # ledger cursor, so a restart resumes where it left off
     last_day: int = 0
     last_state: dict[str, Any] = field(default_factory=dict)
+    last_roster: list[str] = field(default_factory=list)   # the colonist names last seen; used to tell colonies apart
     updated: float = 0.0
     voice: str = ""              # per-chronicle voice override ("" = the configured default)
     diarist: str = ""            # for the diary voice: who holds the book
@@ -100,7 +112,7 @@ class Chronicle:
             "difficulty": self.difficulty, "started": self.started, "started_day": self.started_day,
             "start_date": self.start_date, "status": self.status, "chapters": [c.to_dict() for c in self.chapters],
             "epitaph": self.epitaph, "last_seq": self.last_seq, "last_day": self.last_day,
-            "last_state": self.last_state, "updated": self.updated,
+            "last_state": self.last_state, "last_roster": self.last_roster, "updated": self.updated,
             "voice": self.voice, "diarist": self.diarist, "directive": self.directive,
             "saga": self.saga, "saga_through": self.saga_through,
         }
@@ -122,6 +134,7 @@ class Chronicle:
         c.last_day = int(d.get("last_day", 0))
         c.saga_through = int(d.get("saga_through", 0))
         c.last_state = dict(d.get("last_state") or {})
+        c.last_roster = [str(x) for x in (d.get("last_roster") or [])]
         c.updated = float(d.get("updated", 0))
         c.chapters = [Chapter.from_dict(x) for x in d.get("chapters", [])]
         return c
