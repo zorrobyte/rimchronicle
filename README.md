@@ -6,11 +6,17 @@ It is written for a human at the keyboard. If an AI agent happens to be driving 
 
 ## Screenshots
 
-<p align="center"><img src="docs/reader.png" width="900" alt="RimChronicle reader: a chapter with the base photographed from above"></p>
+<p align="center"><img src="docs/reader.png" width="900" alt="The reader: a chapter in the Storyteller's voice, the base from above, and the moments the camera caught as they happened"></p>
 
-| Library | Reader, light theme |
+| The library | The people |
 |---|---|
-| <img src="docs/library.png" width="440"> | <img src="docs/reader-light.png" width="440"> |
+| <img src="docs/library.png" width="440" alt="Library of colonies with pull quotes"> | <img src="docs/people.png" width="440" alt="Colonist dossiers with portraits, traits, health and arcs"> |
+
+| The timeline | Settings |
+|---|---|
+| <img src="docs/timeline.png" width="440" alt="Time-lapse player, sparklines, and the event strip with chapter flags"> | <img src="docs/settings.png" width="440" alt="Voice cards with samples on the settings page"> |
+
+There is a light theme too: <a href="docs/reader-light.png">the reader in daylight</a>.
 
 ## Quick start
 
