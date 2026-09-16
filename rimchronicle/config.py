@@ -20,7 +20,7 @@ DEFAULTS: dict[str, Any] = {
         "disable_thinking": True,
     },
     "narrator": {
-        "voice": "chronicler",         # see rimchronicle/voices.py; a chronicle can override it
+        "voice": "storyteller",        # see rimchronicle/voices.py; a chronicle can override it
         "custom_prompt": "",           # the system prompt used by the "custom" voice
         "directive": "",               # author directive appended to every chapter prompt
         "min_events": 4,

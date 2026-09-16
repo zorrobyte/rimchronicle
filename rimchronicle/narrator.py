@@ -279,7 +279,7 @@ class Narrator:
 
     # ---------------------------------------------------------------- voices
     def voice_for(self, chron: Chronicle, override: str | None = None) -> Voice:
-        return get_voice(override or chron.voice or self.cfg.get("voice") or "chronicler")
+        return get_voice(override or chron.voice or self.cfg.get("voice") or "storyteller")
 
     def _resolve_diarist(self, chron: Chronicle) -> tuple[str, str]:
         """(diarist, handover text). Picks one when none is set or the current one is gone."""

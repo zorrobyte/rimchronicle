@@ -490,7 +490,7 @@ def test_storyteller_custom_diary_and_directive_fills():
     assert d.startswith(chron)
     assert build_system_prompt(VOICES["chronicler"], colony="Aswell", state_line=SL, directive="   ") == chron
     # lookups
-    assert get_voice(" NOIR ").id == "noir" and get_voice("nope").id == "chronicler" and get_voice(None).id == "chronicler"
+    assert get_voice(" NOIR ").id == "noir" and get_voice("nope").id == "storyteller" and get_voice(None).id == "storyteller"
     assert [v["id"] for v in list_voices()] == list(VOICES) and list_voices()[0]["temperature"] == 0.7 and all(v["sample"] for v in list_voices())
 
 
@@ -513,7 +513,7 @@ def test_engine_chapter_prompt_carries_people_threads_and_changes(cfg, store, br
     assert "Ledger since the last chapter: nothing notable was recorded." in text
     assert "- the closing line must read: State of the colony: day 3, 2 colonists, food 4.5 days, mood 55, threat none (80 points)." in text
     assert text.endswith("Write chapter 1. Trigger: opening.")
-    assert ch1.voice == "chronicler" and ch1.trigger == "opening" and llm.temperatures[-1] == VOICES["chronicler"].temperature == 0.7
+    assert ch1.voice == "storyteller" and ch1.trigger == "opening" and llm.temperatures[-1] == VOICES["storyteller"].temperature == 0.8
     assert set(ch1.inputs) >= {"user_text", "images", "state", "roster", "closing", "date", "storyteller"}
     assert ch1.inputs["user_text"] == text and ch1.inputs["roster"] == ["Kena", "Lumi"] and ch1.inputs["state"]["colonists"] == 2 and ch1.inputs["closing"] is False
     assert ch1.inputs["images"] == ch1.images and ch1.inputs["date"] == "day 3 of Aprimay" and ch1.inputs["storyteller"] == "Cassandra"
@@ -522,7 +522,7 @@ def test_engine_chapter_prompt_carries_people_threads_and_changes(cfg, store, br
     assert [s for s in bridge.screenshots if s[2] != 8] == [(120, 115, 50)] and (store.frames_dir(chron.id) / ch1.images[0]["file"]).exists()
     assert image_count(llm.calls[0]) == 1 and "Pictures attached, in order" in text and "1. Aswell on day 3" in text
     recs, _ = eng.timeline.read(chron.id, kinds={"chapter"})
-    assert len(recs) == 1 and recs[0]["k"] == 1 and recs[0]["voice"] == "chronicler" and recs[0]["trigger"] == "opening" and recs[0]["images"] == [ch1.images[0]["file"]]
+    assert len(recs) == 1 and recs[0]["k"] == 1 and recs[0]["voice"] == "storyteller" and recs[0]["trigger"] == "opening" and recs[0]["images"] == [ch1.images[0]["file"]]
     assert recs[0]["t"] == ch1.t == clock.t
     kinds = [e["kind"] for e in drain(q)]
     assert [k for k in kinds if k != "frame"] == ["bridge", "chronicle", "state", "writing", "chapter", "idle"] and "frame" in kinds
@@ -603,7 +603,7 @@ def test_engine_step_publishes_frames_and_attaches_them(cfg, store, bridge, llm,
     ch = eng.watcher.chronicle.chapters[0]
     assert ch.trigger == "drama: Kena died"
     assert [im["frame"] for im in ch.images] == [True, True] and ch.images[1]["file"] == moment["file"] and ch.images[0]["file"] == frames[1]["file"]
-    assert evs[-2]["data"]["k"] == 1 and evs[-2]["data"]["voice"] == "chronicler" and evs[-1]["data"] == {}
+    assert evs[-2]["data"]["k"] == 1 and evs[-2]["data"]["voice"] == "storyteller" and evs[-1]["data"] == {}
     assert eng.camera.count_since_chapter == 0   # reset once the chapter took its pictures
     assert eng.status()["camera"] == {"since_chapter": 0, "pending": 0, "error": ""}
     assert [f["shot"] for f in eng.timeline.frames(eng.watcher.game_id) if f["shot"] != "portrait"] == ["colonist_died", "base"]
@@ -647,7 +647,7 @@ def test_rewrite_keeps_versions_and_reuses_the_stored_prompt(cfg, store, bridge,
     eng.step()
     chron = eng.watcher.chronicle
     ch = chron.chapters[0]
-    old = {"title": ch.title, "summary": ch.summary, "body": ch.body, "voice": "chronicler", "pull_quote": ch.pull_quote, "t": ch.t}
+    old = {"title": ch.title, "summary": ch.summary, "body": ch.body, "voice": "storyteller", "pull_quote": ch.pull_quote, "t": ch.t}
     assert len(ch.images) == 2
     assert ch.pull_quote == "Kena hauled steel while Lumi watched the tree line."   # the model gave none, so the body's first strong sentence stands in
     clock.advance(5)
@@ -659,14 +659,14 @@ def test_rewrite_keeps_versions_and_reuses_the_stored_prompt(cfg, store, bridge,
     assert image_count(llm.calls[1]) == image_count(llm.calls[0]) == 2
     assert "hardboiled" in system_text(llm.calls[1]) and SL in system_text(llm.calls[1]) and llm.temperatures[-1] == VOICES["noir"].temperature
     saved = store.load(chron.id).chapters[0]
-    assert saved.voice == "noir" and saved.versions[0]["voice"] == "chronicler" and saved.inputs["user_text"] == ch.inputs["user_text"]
+    assert saved.voice == "noir" and saved.versions[0]["voice"] == "storyteller" and saved.inputs["user_text"] == ch.inputs["user_text"]
     assert saved.public()["versions"] == [old] and "inputs" not in saved.public()
     # rewrite again through the engine's queue: versions accumulate, newest last
     llm.reply_override = None
     q = eng.hub.subscribe()
     eng.request_rewrite(chron.id, 1, "gazette")
     eng.step()
-    assert [v["voice"] for v in ch.versions] == ["chronicler", "noir"] and ch.voice == "gazette" and ch.title.startswith("Chapter ")
+    assert [v["voice"] for v in ch.versions] == ["storyteller", "noir"] and ch.voice == "gazette" and ch.title.startswith("Chapter ")
     kinds = [e["kind"] for e in drain(q)]
     assert kinds[-3:] == ["writing", "chapter", "idle"]
     # a chapter without stored inputs cannot be re-narrated
@@ -741,7 +741,7 @@ def test_filter_settings_coerces_and_drops_unknown_keys():
 def test_engine_settings_hot_apply_persist_and_mask(cfg, store, bridge, llm, clock, tmp_path):
     eng = make_engine(cfg, bridge, llm, clock)
     eng.step()
-    assert eng.watcher.chronicle.chapters[0].voice == "chronicler" and eng.status()["voice"] == "chronicler"
+    assert eng.watcher.chronicle.chapters[0].voice == "storyteller" and eng.status()["voice"] == "storyteller"
     view = eng.apply_settings({"narrator": {"voice": "gazette", "min_events": "7"}, "llm": {"temperature": 0.3}, "camera": {"moments": False, "max_per_chapter": "5"}, "web": {"port": 1}, "bogus": {"x": 1}})
     assert eng.cfg is cfg and cfg["narrator"]["voice"] == "gazette" and cfg["narrator"]["min_events"] == 7
     assert eng.narrator.cfg is cfg["narrator"] and eng.narrator.cfg["voice"] == "gazette"
