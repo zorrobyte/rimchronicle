@@ -70,7 +70,7 @@ class Engine:
         self.people = People(self.bridge, self.store, cfg["narrator"])
         self.camera.on_frame = self._on_frame
         ocfg = cfg.get("overseer", {})
-        self.overseer = overseer if overseer is not None else Overseer(ocfg.get("url", "http://127.0.0.1:8770"), enabled=bool(ocfg.get("enabled", True)), poll_seconds=float(ocfg.get("poll_seconds", 5)))
+        self.overseer = overseer if overseer is not None else Overseer(ocfg.get("url", "http://127.0.0.1:8770"), enabled=bool(ocfg.get("enabled", False)), poll_seconds=float(ocfg.get("poll_seconds", 5)))
         self.narrator = Narrator(cfg["narrator"], self.store, self.llm, self.watcher, self.overseer, camera=self.camera, people=self.people, timeline=self.timeline)
         self.watcher.listeners.append(self.hub.publish)
         self._stop = threading.Event()
@@ -222,7 +222,7 @@ class Engine:
         if "narrator" in clean and "base_width_cells" in clean["narrator"]:
             self.camera.cfg["base_width_cells"] = clean["narrator"]["base_width_cells"]
         if "overseer" in clean:
-            self.overseer.enabled = bool(self.cfg["overseer"].get("enabled", True))
+            self.overseer.enabled = bool(self.cfg["overseer"].get("enabled", False))
             self.overseer.url = str(self.cfg["overseer"].get("url", self.overseer.url)).rstrip("/")
             self.overseer.poll_seconds = float(self.cfg["overseer"].get("poll_seconds", 5))
         if persist and clean and self.cfg.get("root"):

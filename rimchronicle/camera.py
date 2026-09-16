@@ -8,6 +8,7 @@ view never moves; a shot costs about 70 ms.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any, Callable
 
@@ -22,6 +23,7 @@ log = logging.getLogger("rimchronicle.camera")
 FOLLOW_UP_SECONDS = (20.0, 60.0)
 RANK = {"colonist_died": 100, "pawn_died": 70, "colonist_downed": 80, "hostile_group": 75, "fight": 74, "incident": 70, "mental_break": 60,
         "tale": 55, "manhunter": 50, "health": 45, "colonist_joined": 40, "building_lost": 35, "event": 20, "base": 0, "daily": 0, "portrait": 0}
+FRAME_NUMBER = re.compile(r"-([0-9]+)-[^/]+\.jpg$")
 
 
 class Camera:
@@ -38,6 +40,7 @@ class Camera:
         self._daily_done: dict[str, int] = {}          # game_id -> last day shot
         self._portrait_day: dict[str, int] = {}        # name -> day
         self._n = 0
+        self._active_game: str | None = None
         self.last_error = ""
         self.on_frame: Callable[[dict[str, Any]], None] | None = None
 
@@ -45,15 +48,14 @@ class Camera:
     def on_events(self, chron: Chronicle | None, events: list[dict[str, Any]], summary: dict[str, Any] | None) -> None:
         if chron is None or not events:
             return
+        self._select_game(chron)
         now = self.clock()
         home = (summary or {}).get("home_center") if summary else None
         for ev in events:
             kind = str(ev.get("kind"))
             if kind == "day" and self.cfg.get("daily", True) and home:
                 day = int(ev.get("day") or (summary or {}).get("day") or 0)
-                if self._daily_done.get(chron.id) != day:
-                    self._daily_done[chron.id] = day
-                    self.shoot(chron, int(home[0]), int(home[1]), int(self.cfg.get("base_width_cells", 50) or 50), "daily", f"{chron.title} on day {day}", day=day, hour=ev.get("hour"))
+                self._daily(chron, home, day, ev.get("hour"))
                 continue
             if not self.cfg.get("moments", True) or not is_moment(ev):
                 continue
@@ -75,6 +77,7 @@ class Camera:
         """Drain due follow-ups and take portraits once per day."""
         if chron is None:
             return
+        self._select_game(chron)
         now = self.clock()
         due = [p for p in self.pending if p["due"] <= now]
         if due:
@@ -105,8 +108,44 @@ class Camera:
                 self._portrait_day.pop(n, None)
             return  # one portrait per tick keeps the loop responsive; the rest follow on later ticks
 
+    def _select_game(self, chron: Chronicle) -> None:
+        """Keep one game's shots and delayed raid jobs out of the next game's book."""
+        if self._active_game == chron.id:
+            return
+        self._active_game = chron.id
+        self.taken.clear()
+        self.pending.clear()
+        self.count_since_chapter = 0
+        self._last_by_kind.clear()
+        self._daily_done.clear()
+        self._portrait_day.clear()
+        self._n = 0
+        # A restarted server must not overwrite a frame or repeat today's pictures.
+        if self.timeline is not None:
+            for rec in self.timeline.frames(chron.id):
+                day = _int(rec.get("day"))
+                if rec.get("shot") == "daily" and day is not None:
+                    self._daily_done[chron.id] = max(day, self._daily_done.get(chron.id, day))
+                elif rec.get("shot") == "portrait" and day is not None and rec.get("who"):
+                    who = str(rec["who"])
+                    self._portrait_day[who] = max(day, self._portrait_day.get(who, day))
+        fdir = self.store.frames_dir(chron.id)
+        if fdir.exists():
+            for path in fdir.iterdir():
+                match = FRAME_NUMBER.search(path.name)
+                if match:
+                    self._n = max(self._n, int(match.group(1)))
+
+    def _daily(self, chron: Chronicle, home: list[int], day: int, hour: Any) -> None:
+        if self._daily_done.get(chron.id, -1) >= day:
+            return
+        rec = self.shoot(chron, int(home[0]), int(home[1]), int(self.cfg.get("base_width_cells", 50) or 50), "daily", f"{chron.title} on day {day}", day=day, hour=hour)
+        if rec is not None:
+            self._daily_done[chron.id] = day
+
     # ---------------------------------------------------------------- shooting
     def shoot(self, chron: Chronicle, x: int, z: int, w: int, kind: str, label: str, *, seq: Any = None, day: Any = None, hour: Any = None, dramatic: bool = False, max_px: int | None = None, who: str | None = None) -> dict[str, Any] | None:
+        self._select_game(chron)
         try:
             png = self.bridge.screenshot(x, z, w)
         except BridgeError as e:
@@ -156,6 +195,7 @@ class Camera:
     # ---------------------------------------------------------------- selection
     def pick_for_chapter(self, chron: Chronicle, since_t: float, n: int = 3) -> list[dict[str, Any]]:
         """The best moments since the last chapter: dramatic first, then spread over time."""
+        self._select_game(chron)
         cands = [r for r in self.taken if r.get("t", 0) > since_t and r.get("file")]
         if not cands:
             return []

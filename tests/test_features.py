@@ -367,6 +367,37 @@ def test_camera_pick_for_chapter_prefers_drama_then_time_order(cfg, store, bridg
     assert [p["event_seq"] for p in camera.pick_for_chapter(chron, since_t=0.0, n=3)] == [1, 3]
 
 
+def test_camera_restart_preserves_frames_and_avoids_duplicate_daily_shots(cfg, store, bridge, clock):
+    camera, tl, chron = make_camera(cfg, store, bridge, clock)
+    summary = bridge.rpc("state.summary")
+    day = {"seq": 1, "kind": "day", "text": "day 4", "day": 4, "hour": 0}
+    camera.on_events(chron, [day], summary)
+    first = tl.frames(chron.id)[0]["file"]
+    original = store.frame_path(chron.id, first).read_bytes()
+
+    restarted = Camera(bridge, store, tl, cfg["camera"], clock=clock)
+    restarted.on_events(chron, [day], summary)
+    assert len(tl.frames(chron.id)) == 1
+    assert store.frame_path(chron.id, first).read_bytes() == original
+    restarted.tick(chron, summary, [{"name": "Kena", "pos": [110, 110]}])
+    portrait = tl.frames(chron.id)[-1]["file"]
+    assert portrait != first and store.frame_path(chron.id, portrait).exists()
+    again = Camera(bridge, store, tl, cfg["camera"], clock=clock)
+    again.tick(chron, summary, [{"name": "Kena", "pos": [110, 110]}])
+    assert len(tl.frames(chron.id)) == 2
+
+
+def test_camera_does_not_carry_raid_shots_into_another_colony(cfg, store, bridge, clock):
+    camera, _, first = make_camera(cfg, store, bridge, clock)
+    raid = {"seq": 1, "kind": "hostile_group", "text": "Raid", "cell": [40, 40], "day": 3, "hour": 9}
+    camera.on_events(first, [raid], bridge.rpc("state.summary"))
+    assert camera.pending and camera.taken and camera.count_since_chapter == 1
+    second = Chronicle(id="another-colony", seed="another")
+    camera.tick(second, bridge.rpc("state.summary"))
+    assert camera.pending == [] and camera.taken == [] and camera.count_since_chapter == 0
+    assert camera.pick_for_chapter(second, since_t=0) == []
+
+
 # ---------------------------------------------------------------- 4. people
 def test_people_dossiers_arcs_and_the_fallen(cfg, store, bridge):
     people = People(bridge, store, cfg["narrator"])

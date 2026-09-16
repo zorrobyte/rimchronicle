@@ -27,7 +27,7 @@ narrator:
   grid: false                    # draw a faint 10-cell grid on images
 
 overseer:
-  enabled: true                  # quote an AI agent's step notes if its dashboard is reachable
+  enabled: false                 # opt in to quoting an AI agent's step notes
   url: http://127.0.0.1:8770
   poll_seconds: 5
 

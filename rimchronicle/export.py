@@ -16,8 +16,6 @@ from .store import Chronicle, Store
 from .timeline import Timeline
 from .voices import get_voice
 
-FONTS = '<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">'
-
 BOOK_CSS = """
 :root{--bg:#f6f1e7;--paper:#fffdf8;--ink:#2a2420;--muted:#6f655b;--rule:#d9cfbf;--accent:#8a3b2a;--pill:#ebe3d3;--shadow:0 1px 2px rgba(0,0,0,.06),0 12px 32px rgba(60,40,20,.10)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#17150f;--paper:#1f1c15;--ink:#ece4d4;--muted:#a99e8c;--rule:#3a352b;--accent:#e08a5a;--pill:#2b261d;--shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.35)}}
@@ -175,7 +173,7 @@ def render_book(chron: Chronicle, store: Store | None = None, image_dir: Path | 
     fdir = store.frames_dir(chron.id) if store else (image_dir.parent / "frames" if image_dir else None)
     e = html.escape
     parts = [f"<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-             f"<title>{e(chron.title)}: a RimWorld chronicle</title>{FONTS}<style>{BOOK_CSS}</style></head><body><main class=\"book\">"]
+             f"<title>{e(chron.title)}: a RimWorld chronicle</title><style>{BOOK_CSS}</style></head><body><main class=\"book\">"]
     ident = ", ".join(x for x in (f"of the faction {chron.faction}" if chron.faction else "", f"seed {chron.seed}" if chron.seed and chron.name else "") if x)
     meta = ", ".join(x for x in (chron.scenario, chron.storyteller, chron.difficulty) if x)
     status = "the colony endures" if chron.status == "running" else "the record is closed"

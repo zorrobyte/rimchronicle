@@ -24,6 +24,7 @@ def test_export_produces_html_with_inline_images(cfg, bridge, llm):
     out = export_book(eng.store, gid)
     html = out.read_text(encoding="utf-8")
     assert html.startswith("<!doctype html>")
+    assert "https://" not in html and "http://" not in html  # the downloaded book works offline
     assert html.count("data:image/jpeg;base64,") == 3  # two chapter pictures plus the day's wide shot in the "Days" contact sheet
     assert ch.title in html and "State of the colony" in html
     # the inline image really is the JPEG we stored
@@ -36,6 +37,8 @@ def test_web_api_and_page(cfg, bridge, llm):
     eng = make_engine(cfg, bridge, llm)
     app = create_app(eng)
     c = TestClient(app)
+    assert c.get("/static/app.js").headers["cache-control"] == "no-cache"
+    assert c.get("/static/app.css").headers["cache-control"] == "no-cache"
     assert "RimChronicle" in c.get("/").text
     assert c.get("/api/chronicles").json() == []
     eng.step()  # warms the watcher; opening chapter is due and written in-loop

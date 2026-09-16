@@ -2,7 +2,7 @@
 
 RimChronicle watches a running RimWorld colony and writes its story as it happens: an illustrated, chapter-by-chapter chronicle with its own reader. It reads the game through the [RimBridge](https://github.com/zorrobyte/rimagent) mod's loopback HTTP API, keeps a full record of what happens, takes pictures from an off-screen camera the moment something happens, knows who the colonists are (traits, backstories, lovers, grudges, scars), and asks a vision-capable language model to write the next chapter in one of nine voices.
 
-It is written for a human at the keyboard. If an AI agent happens to be driving the same bridge, its notes can be quoted as "the overseer's log"; nothing depends on that.
+It is written for a human at the keyboard. If an AI agent happens to be driving the same bridge, you can opt in to quoting its notes as "the overseer's log"; nothing depends on that.
 
 ## Screenshots
 
@@ -175,7 +175,7 @@ flowchart TD
 | `camera.max_per_chapter`, `debounce_seconds` | `8`, `10` | how often |
 | `camera.moment_width_cells`, `portrait_width_cells`, `frame_max_px` | `24`, `8`, `1024` | framing |
 | `timeline.state_every_seconds` | `60` | how often a state sample is recorded |
-| `overseer.enabled`, `overseer.url`, `overseer.poll_seconds` | `true`, `http://127.0.0.1:8770`, `5` | quote an agent's notes if its dashboard is up |
+| `overseer.enabled`, `overseer.url`, `overseer.poll_seconds` | `false`, `http://127.0.0.1:8770`, `5` | opt in to quoting an agent's notes if its dashboard is up |
 | `web.host`, `web.port` | `127.0.0.1`, `8771` | where the reader is served |
 | `storage.dir` | `chronicles` | where chronicles are written (relative to the project) |
 

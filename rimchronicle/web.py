@@ -20,10 +20,18 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 TIMELINE_KINDS = {"event", "frame", "chapter", "state", "chronicle", "game", "note"}
 
 
+class ReaderStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope: dict[str, Any]) -> Response:
+        response = await super().get_response(path, scope)
+        if path in {"app.js", "app.css"}:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def create_app(engine: Engine) -> FastAPI:
     app = FastAPI(title="RimChronicle", docs_url=None, redoc_url=None)
     store = engine.store
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    app.mount("/static", ReaderStaticFiles(directory=str(STATIC_DIR)), name="static")
 
     def find(game_id: str) -> Chronicle:
         """The live chronicle object if it is the live game, else the one on disk; 404 otherwise."""

@@ -47,7 +47,7 @@ DEFAULTS: dict[str, Any] = {
         "frame_max_px": 1024,
     },
     "timeline": {"state_every_seconds": 60},
-    "overseer": {"enabled": True, "url": "http://127.0.0.1:8770", "poll_seconds": 5},
+    "overseer": {"enabled": False, "url": "http://127.0.0.1:8770", "poll_seconds": 5},
     "web": {"host": "127.0.0.1", "port": 8771},
     "storage": {"dir": "chronicles"},
 }

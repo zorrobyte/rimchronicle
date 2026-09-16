@@ -50,8 +50,9 @@
     if (status.writing) { p.classList.add('busy'); t.textContent = 'writing a chapter'; return; }
     if (g.state !== 'playing') { t.textContent = 'game in ' + (g.state || 'menu'); return; }
     p.classList.add('on');
+    const colony = status.colony || g.seed || 'game';
     const pend = status.pending_events ? ', ' + status.pending_events + ' events waiting' : '';
-    t.textContent = (status.colony || g.seed || 'game') + ', day ' + g.day + pend;
+    t.textContent = matchMedia('(max-width:700px)').matches ? `${colony} · day ${g.day}` : colony + ', day ' + g.day + pend;
   }
   async function fetchStatus(){ try { status = await api('/api/status'); } catch (e) { status = {online:false}; } renderStatus(); }
   function renderNav(){
@@ -237,22 +238,34 @@
     const ch = c.chapters[k - 1];
     const meta = [c.faction ? 'of the faction ' + c.faction : '', c.scenario, c.storyteller ? 'storyteller ' + c.storyteller : '', c.difficulty, c.name ? 'seed ' + c.seed : ''].filter(Boolean).join(', ');
     let html = `<div class="reader"><div class="book-head"><div><div class="sc muted">A RimWorld chronicle</div><h1 class="display">${esc(c.title)}</h1>
-      <div class="meta">${esc(meta)}${meta ? '. ' : ''}${c.days} days, ${plural(n, 'chapter')}${c.status === 'ended' ? ', ended' : ''}.</div>
+      <div class="meta full-meta">${esc(meta)}${meta ? '. ' : ''}${c.days} days, ${plural(n, 'chapter')}${c.status === 'ended' ? ', ended' : ''}.</div>
+      <div class="meta compact-meta">Day ${c.days} &middot; ${plural(n, 'chapter')}${c.storyteller ? ' &middot; ' + esc(c.storyteller) : ''}${c.status === 'ended' ? ' &middot; ended' : ''}</div>
       <div class="chips"><span class="pop-anchor"><button class="chip" id="voice-chip">${voiceChipHtml(c)}</button></span>${c.directive ? `<span class="muted" style="font-size:.8em;font-style:italic">Directive: ${esc(c.directive)}</span>` : ''}</div></div>
       <span class="grow"></span><div class="actions">
         <span class="pop-anchor"><button class="btn primary" id="write-now" ${(!c.live || !status.online || status.writing) ? 'disabled' : ''}>${status.writing ? '<span class="spinner"></span> Writing' : 'Write a chapter now'}</button></span>
         <a class="btn" href="/api/chronicles/${enc(c.id)}/book" download>Download book</a>
       </div></div>`;
+    if (!c.live && status.online && status.game && status.game.state === 'playing' && status.chronicle) {
+      html += `<div class="archive-note">This is an earlier book${status.colony === c.title ? ' with the same colony name' : ''}. <a href="#/read/${enc(status.chronicle)}">Open the live colony &rarr;</a></div>`;
+    }
     html += stripHtml(c);
-    html += '<div class="layout"><nav class="toc"><div class="lbl">Contents</div>';
+    html += '<div class="layout"><nav class="toc" aria-label="Chapters"><div class="lbl">Contents</div>';
+    if (n) html += `<button type="button" class="toc-toggle" id="toc-toggle" aria-expanded="false" aria-controls="toc-list"><span class="toc-toggle-label">Chapters <b>${k} of ${n}</b></span><span class="toc-toggle-title">${esc(ch.title)}</span><span class="toc-caret" aria-hidden="true">&#9662;</span></button>`;
+    html += '<div class="toc-list" id="toc-list">';
     for (const x of c.chapters) html += `<a href="#/read/${enc(c.id)}/${x.k}" class="${x.k === k ? 'cur' : ''}">${x.k}. ${esc(x.title)}<small>day ${x.day}${x.voice && x.voice !== 'chronicler' ? ' &middot; ' + esc(voiceName(x.voice)) : ''}</small></a>`;
-    html += '</nav><div>';
+    html += '</div></nav><div>';
     if (!ch) html += '<div class="nochap">No chapters yet. The chronicler is watching; the first chapter arrives when something worth telling has happened, or when you ask for one.</div>';
     else html += chapterHtml(c, ch, k, null);
     html += '</div></div></div>';
     view.innerHTML = html;
     document.title = (ch ? ch.title + ' | ' : '') + c.title + ' | RimChronicle';
     scrollTo({ top: 0 });
+    const tocToggle = $('#toc-toggle');
+    if (tocToggle) tocToggle.onclick = () => {
+      const open = tocToggle.getAttribute('aria-expanded') !== 'true';
+      tocToggle.setAttribute('aria-expanded', String(open));
+      tocToggle.closest('.toc').classList.toggle('open', open);
+    };
     if (ch) wireChapter(c, ch, k);
     // the voice chip: per-chronicle override
     const chip = $('#voice-chip');
@@ -413,11 +426,11 @@
       <p>${ov.records || 0} records over ${span}: ${plural(kinds.event || 0, 'event')}, ${plural(kinds.frame || 0, 'frame')}, ${plural(kinds.chapter || 0, 'chapter')}, ${plural(kinds.state || 0, 'state sample')}.</p></div>`;
     html += `<div class="player" id="player"><div class="screen"><img alt="" id="pl-img"><div class="caption"><span id="pl-label"></span><b id="pl-when"></b></div></div>
       <div class="controls">
-        <button class="btn small" id="pl-prev" title="Previous frame">&#9664;</button>
+        <button class="btn small" id="pl-prev" title="Previous frame" aria-label="Previous frame">&#9664;</button>
         <button class="btn small primary" id="pl-play" title="Play">Play</button>
-        <button class="btn small" id="pl-next" title="Next frame">&#9654;</button>
+        <button class="btn small" id="pl-next" title="Next frame" aria-label="Next frame">&#9654;</button>
         <span class="speed"><button data-speed="1" class="cur">1&times;</button><button data-speed="2">2&times;</button><button data-speed="4">4&times;</button></span>
-        <input type="range" id="pl-range" min="0" max="${Math.max(0, tl.frames.length - 1)}" value="${tl.idx}" ${tl.frames.length ? '' : 'disabled'}>
+        <input type="range" id="pl-range" aria-label="Time-lapse frame" min="0" max="${Math.max(0, tl.frames.length - 1)}" value="${tl.idx}" ${tl.frames.length ? '' : 'disabled'}>
         <span class="count" id="pl-count"></span>
       </div></div>`;
     html += '<div class="sparks" id="sparks"></div>';
@@ -589,7 +602,7 @@
     html += `<section class="section"><h2 class="display">Voice</h2><p class="blurb">Who tells the story. A chronicle can override this from its reader page.</p><div class="voice-cards">`;
     for (const v of (s.voices || [])) {
       html += `<label class="voice-card ${n.voice === v.id ? 'cur' : ''}"><input type="radio" name="voice" data-path="narrator.voice" value="${esc(v.id)}" ${n.voice === v.id ? 'checked' : ''}>
-        <div class="name">${esc(v.name)}${v.first_person ? '<span class="tag">first person</span>' : ''}</div><div class="blurb">${esc(v.blurb)}</div><div class="sample">${esc(v.sample)}</div></label>`;
+        <div class="name">${esc(v.name)}${v.first_person ? '<span class="tag">first person</span>' : ''}</div><div class="blurb">${esc(v.blurb)}</div><div class="sample">${esc(v.sample)}</div><button type="button" class="sample-toggle" aria-expanded="false">Read full sample</button></label>`;
     }
     html += `</div><div id="custom-wrap" class="${n.voice === 'custom' ? '' : 'hidden'}" style="margin-top:12px"><div class="fields">${field('narrator', 'custom_prompt', 'Custom system prompt', 'textarea', { placeholder: 'You are…', hint: 'Used by the Custom voice. The core rules (no invented events, the state line, the JSON shape) are appended.' })}</div></div></section>`;
     html += `<section class="section"><h2 class="display">Directive</h2><p class="blurb">An author's note appended to every chapter prompt, in any voice.</p><div class="fields">${field('narrator', 'directive', 'Directive', 'textarea', { placeholder: 'e.g. Dwell on the animals. Never mention the weather twice.' })}</div></section>`;
@@ -617,6 +630,13 @@
     view.innerHTML = html;
     document.title = 'Settings | RimChronicle';
     scrollTo({ top: 0 });
+    $$('.sample-toggle', view).forEach(b => b.onclick = e => {
+      e.preventDefault(); e.stopPropagation();
+      const expanded = b.getAttribute('aria-expanded') !== 'true';
+      b.setAttribute('aria-expanded', String(expanded));
+      b.closest('.voice-card').classList.toggle('expanded', expanded);
+      b.textContent = expanded ? 'Show less' : 'Read full sample';
+    });
     view.oninput = updateDirty; view.onchange = updateDirty;
     $('#save-btn').onclick = async () => {
       const patch = diffForm();
