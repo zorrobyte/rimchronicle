@@ -23,6 +23,8 @@ class FakeBridge:
         self.day = 3
         self.hour = 8
         self.colonists = 3
+        self.alerts: list[dict[str, Any]] = [{"label": "Major break risk", "priority": "Critical"}]
+        self.hostiles: list[dict[str, Any]] = []   # e.g. [{"kind": "Pirate", "pos": [40, 40]}] while a raid is on the map
         self.ledger: list[dict[str, Any]] = []
         self.png = tiny_png()
         self.screenshots: list[tuple[int, int, int]] = []
@@ -79,9 +81,26 @@ class FakeBridge:
         self._check()
         self.rpc_calls.append(method)
         if method == "state.summary":
-            return {"colonists": self.colonists, "downed": 0, "prisoners": 0, "animals": 1, "wealth": 12000, "mood_avg": 55, "food_days": 4.5, "nutrition": 21.6, "threat_points": 80, "danger": "None", "day": self.day, "hour": self.hour, "date": f"day {self.day} of Aprimay", "season": "Spring", "weather": "Clear", "temp_outdoor": 21, "biome": "TemperateForest", "home_center": [120, 115], "research_current": "Smithing", "research_progress": 40}
+            return {"colonists": self.colonists, "downed": 0, "prisoners": 0, "animals": 1, "wealth": 12000, "mood_avg": 55, "food_days": 4.5, "nutrition": 21.6, "threat_points": 80, "danger": "None", "day": self.day, "hour": self.hour, "date": f"day {self.day} of Aprimay", "season": "Spring", "weather": "Clear", "temp_outdoor": 21, "biome": "TemperateForest", "home_center": [120, 115], "research_current": "Smithing", "research_progress": 40,
+                    "alerts": list(self.alerts), "hostiles": list(self.hostiles)}
         if method == "state.pawns":
-            return [{"name": n, "top_skills": "Shooting 8, Mining 6", "weapon": "Bolt-action rifle", "mood": 60, "health": 100, "job": "hauling"} for n in ("Kena", "Lumi", "Kat")[: self.colonists]]
+            return [{"id": f"Human{i + 1}", "name": n, "pos": [118 + i, 117], "top_skills": "Shooting 8, Mining 6", "weapon": "Bolt-action rifle", "mood": 60, "health": 100, "job": "hauling"} for i, n in enumerate(("Kena", "Lumi", "Kat")[: self.colonists])]
+        if method == "state.pawn":
+            name = str((params or {}).get("pawn", ""))
+            who = {"Human1": "Kena", "Human2": "Lumi", "Human3": "Kat"}.get(name, name)
+            if who not in ("Kena", "Lumi", "Kat"):
+                raise BridgeError("no such pawn")
+            return {
+                "id": {"Kena": "Human1", "Lumi": "Human2", "Kat": "Human3"}[who], "name": who, "gender": "Female", "age": {"Kena": 34, "Lumi": 54, "Kat": 27}[who],
+                "childhood": "Caravan child", "adulthood": {"Kena": "Sniper", "Lumi": "Bounty hunter", "Kat": "Scholar"}[who],
+                "traits": [{"trait": "Abrasive", "label": "Abrasive"}, {"trait": "Wimp", "label": "Wimp"}] if who == "Lumi" else [{"trait": "Bookish", "label": "Bookish"}],
+                "skills": {"Shooting": "12!!", "Melee": "12!!", "Social": "7!" if who == "Lumi" else "3", "Intellectual": "13!!" if who == "Kat" else "5"},
+                "mood": 16.0 if who == "Lumi" else 60.0, "health": 100.0, "job": "hauling",
+                "thoughts": [{"thought": "SleptInBarracks", "label": "Awful barracks", "mood": -7.0}, {"thought": "Catharsis", "label": "Catharsis", "mood": 40.0}],
+                "hediffs": [{"def": "MissingBodyPart", "label": "missing left leg", "part": "left leg"}] if who == "Kat" else [],
+                "capacities": {"Moving": 60.0 if who == "Kat" else 100.0}, "room": {"role": "Barracks", "cells": 198},
+                "relations": [{"def": "Lover", "other": "Kat"}] if who == "Kena" else [],
+            }
         if method == "anchor.list":
             return [{"name": "shelter", "rect": {"min": [113, 117], "max": [122, 124]}}]
         if method == "engine.get":
@@ -90,6 +109,10 @@ class FakeBridge:
                 return self.start_tick
             if "Scenario" in path:
                 return "Crashlanded"
+            if "Parent.Label" in path:
+                return "Aswell"
+            if "OfPlayer.Name" in path:
+                return "Anditeria"
             if "TicksAbs" in path:
                 return self.start_tick + self.tick
         if method == "game.status":
@@ -104,6 +127,12 @@ class FakeBridge:
     def scenario_name(self) -> str | None:
         return "Crashlanded"
 
+    def pawn_detail(self, pawn: str):
+        try:
+            return self.rpc("state.pawn", {"pawn": pawn})
+        except BridgeError:
+            return None
+
     def game_start_tick(self) -> int | None:
         return self.start_tick
 
@@ -114,11 +143,16 @@ class FakeLLM:
         self.n = 0
         self.reply_override: str | None = None
         self.fail = False
+        self.temperatures: list = []
 
-    def chat(self, messages, max_tokens=None) -> Reply:
+    def chat(self, messages, max_tokens=None, temperature=None) -> Reply:
+        self.temperatures.append(temperature)
         self.calls.append(messages)
         if self.fail:
             raise RuntimeError("endpoint down")
+        if len(messages) == 1:
+            # a bare user message with no system prompt: the saga roll-up asking for one paragraph
+            return Reply(content=self.reply_override or "The colony of Aswell survived its first days: Kena, Lumi and Kat built and quarrelled.")
         self.n += 1
         if self.reply_override is not None:
             return Reply(content=self.reply_override)

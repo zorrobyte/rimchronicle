@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RimChronicle</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%238a3b2a'/%3E%3Ctext x='16' y='22' font-family='Georgia,serif' font-size='18' fill='%23fffdf8' text-anchor='middle'%3ERC%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="top"><div class="in">
+  <a class="brand" href="#/"><i></i>RimChronicle</a>
+  <nav id="nav" class="nav-links" aria-label="Sections"></nav>
+  <span class="grow"></span>
+  <span id="status" class="pill"><span class="dot"></span><span id="status-text">connecting</span></span>
+  <a class="btn nav-settings" id="nav-settings" href="#/settings">Settings</a>
+  <button class="btn icon" id="theme" title="Toggle light and dark" aria-label="Toggle theme">&#9680;</button>
+</div></header>
+
+<main id="view"></main>
+<a id="toast" class="toast" href="#/"></a>
+<div id="lightbox" class="lightbox hidden" role="dialog" aria-label="Picture"><img alt=""><div class="cap"></div></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

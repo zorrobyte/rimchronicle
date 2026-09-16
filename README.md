@@ -1,8 +1,8 @@
 # RimChronicle
 
-RimChronicle watches a running RimWorld colony and writes its story as it happens: an illustrated, chapter-by-chapter chronicle with its own web page. It reads the game through the [RimBridge](https://github.com/) mod's loopback HTTP API, keeps a ledger of what matters (deaths, raids, arrivals, breakdowns, breakthroughs, quiet days), takes pictures of the base from an off-screen camera, and asks a vision-capable language model to write the next chapter in a dry, specific chronicle voice.
+RimChronicle watches a running RimWorld colony and writes its story as it happens: an illustrated, chapter-by-chapter chronicle with its own reader. It reads the game through the [RimBridge](https://github.com/zorrobyte/rimagent) mod's loopback HTTP API, keeps a full record of what happens, takes pictures from an off-screen camera the moment something happens, knows who the colonists are (traits, backstories, lovers, grudges, scars), and asks a vision-capable language model to write the next chapter in one of nine voices.
 
-It does not care who is playing. A human at the keyboard and an AI agent driving the same bridge produce the same kind of book. If an agent's dashboard happens to be reachable, the narrator can quote its step notes as "the overseer's log"; if not, the chronicle is written from the ledger alone.
+It is written for a human at the keyboard. If an AI agent happens to be driving the same bridge, its notes can be quoted as "the overseer's log"; nothing depends on that.
 
 ## Screenshots
 
@@ -22,93 +22,95 @@ cp config.yaml config.local.yaml   # then edit llm.base_url and llm.model (confi
 uv run rimchronicle serve
 ```
 
-Open http://127.0.0.1:8771. The library fills in as soon as a game is running; the first chapter appears when something worth telling has happened, or when you press "Write a chapter now".
+Open http://127.0.0.1:8771. The library fills in as soon as a game is running; the first chapter appears when something worth telling has happened, or when you press "Write a chapter now". Everything else is on the Settings page.
 
 Other commands:
 
 ```sh
-uv run rimchronicle once               # write one chapter right now and print it
-uv run rimchronicle list               # chronicles on disk
-uv run rimchronicle export <game-id>   # one self-contained HTML book, images inline
-uv run pytest                          # fast tests with a fake bridge and a fake narrator
+uv run rimchronicle once --voice gazette --focus "the raid"   # write one chapter now and print it
+uv run rimchronicle rewrite <game-id> <chapter> --voice noir   # re-narrate a chapter from its stored inputs
+uv run rimchronicle voices                                     # the narrator voices
+uv run rimchronicle list                                       # chronicles on disk
+uv run rimchronicle export <game-id>                           # one self-contained HTML book, images inline
+uv run pytest                                                  # fast tests with a fake bridge and a fake narrator
 ```
+
+## What it does
+
+**The people.** Every colonist gets a dossier from the bridge's `state.pawn`: age, backstory, traits, skills and passions, relations, the room they sleep in, what is bothering them, scars and illnesses, and an "arc" of one-liners accumulated from the ledger (downed by a raccoon on day 14; sad wander after the barracks on day 17). The dossiers go into every prompt, so the narrator writes a cannibal like a cannibal, and the fallen keep their entries with the day and the cause. The People page shows them with portraits.
+
+**The social layer.** RimBridge records the game's own Tales (became lovers, breakup, marriage, social fight, killed a colonist, recruited, tamed, bonded, gave birth, did surgery, ate human meat, and some sixty more), the per-pawn social log (insults, slights, kind words, romance attempts, proposals; idle chat is counted but not listed), relationship changes, diseases and lost limbs, trades, and pet deaths. The chronicle knows that Lumi insulted Kena before Kena stormed off.
+
+**The camera.** RimBridge renders through a second, off-screen camera, so the player's view never moves and a shot costs about 70 ms. The camera shoots the cell where a death, a raid, a break or a fire just happened; follows a fight with frames on the hostiles' centre 20 and 60 seconds later; takes one wide shot per in-game day for the time-lapse; and a portrait of each colonist once a day. A chapter attaches the wide shot plus the best moments since the last chapter, captioned, so the model can see the action.
+
+**The record.** Everything lands in `chronicles/<game-id>/timeline.jsonl`: every ledger event (all kinds, not only the notable ones), state samples, frames, chapters and any overseer notes. The Timeline page plays the time-lapse, draws mood, food, wealth, colonists and threat over the days, and marks every event and chapter. The record is also what makes re-narration possible.
+
+**The voices.** The Chronicler (dry, specific, wry; the default), the Skald (epithets, fate, the dead given their due), the Gazette (dateline, a source close to the kitchen, a WANTED line), the Naturalist (field notes with deadpan footnotes), the Diary (first person from one colonist; when they die the book passes to a survivor), the Noir, the Storyteller (Cassandra, Randy or Phoebe in character), the Quarterly (a memo to an indifferent board), and Custom (your own prompt). Every voice shares the same core rules: nothing invented, name the people and the place, translate the game's labels into English, end on the colony's tally line. Pick a default in Settings, override it per chronicle, rewrite any chapter in another voice (earlier renderings are kept), and add an author's directive ("focus on Lumi's decline") that rides along with every prompt.
+
+**Memory and suspense.** After every eight chapters the older summaries are folded into a rolling "story so far" paragraph, so long colonies keep their arcs without growing the prompt. Each prompt also carries the open threads (alerts, quests, hostiles on the map, unanswered letters, low stocks) and what changed since the last chapter (who joined or died, how the mood and the wealth moved).
 
 ## How it works
 
 ```
-RimWorld + RimBridge  --/events, /rpc, /screenshot-->  watcher  -->  narrator  -->  chronicles/<game-id>/
-                                                         |             |                 chronicle.json
-   agent dashboard (optional) --/api/events-->  overseer -+             |                 chronicle.md
-                                                                       v                 images/*.jpg
-                                                           OpenAI-compatible LLM
-                                                                       ^
+RimWorld + RimBridge  --/events, /rpc, /screenshot-->  watcher --> camera --> narrator --> chronicles/<game-id>/
+                                                          |          |           ^  ^          chronicle.json  chronicle.md
+   agent dashboard (optional) --/api/events--> overseer --+          |    people |  |          people.json  timeline.jsonl
+                                                                     v           |  |          images/*.jpg  frames/*.jpg
+                                                                  timeline ------+  v
+                                                                                 OpenAI-compatible LLM
                                               web UI (FastAPI + SSE, port 8771) reads the same files
 ```
 
-**Watcher** (`rimchronicle/watcher.py`) polls `/events` every two seconds. It keeps only notable kinds (`colonist_died`, `colonist_downed`, `colonist_joined`, `colonist_left`, `incident`, `hostile_group`, `hostile_group_gone`, `manhunter`, `danger`, `mental_break`, `letter`, `quest`, `research_finished`, `built` minus walls, conduits and floors, `building_lost`, `construction_failed`, `dialog_answered`, `day`, `trade`), refreshes a compact colony state from `state.summary` and the roster from `state.pawns`, and survives the bridge going away. A game is identified by its world seed plus its start tick, so a new game (even with the same seed) opens a new chronicle and a reloaded save resumes the old one.
-
-**Narrator** (`rimchronicle/narrator.py`) decides when a chapter is due:
-
-- a dramatic event: a death, a raid or hostile group arriving, a fire, a colonist joining or leaving;
-- a finished in-game day with at least `min_events` notable events;
-- `max_hours_between` in-game hours since the last chapter;
-- an opening chapter the first time a colony is seen;
-- a closing chapter when every colonist is gone or the game is left, with an epitaph;
-- never more often than `min_real_seconds_between` real seconds.
-
-It builds one prompt: a system prompt in the chronicle voice, one-line summaries of every prior chapter, the roster, the new ledger lines, the numbers, and one or two pictures (the base from above, and the place where the triggering event happened when it has a cell). The model is asked for `{"title", "summary", "body"}`; the parser tolerates code fences, chatter around the JSON, raw newlines inside strings, and plain prose. Endpoint errors are logged and the events are kept for the next attempt.
-
-**Storage** (`rimchronicle/store.py`): `chronicles/<game-id>/chronicle.json` is the source of truth (seed, scenario, storyteller, status, chapters with day, hour, images and the ledger sequence numbers each chapter used, epitaph); `chronicle.md` is regenerated alongside it; images are JPEG quality 85. Restarting `serve` resumes where it left off.
-
-**Web UI** (`rimchronicle/web.py`, `rimchronicle/webpage.py`): one page, no build step. A library of colonies and a reader with chapter images, serif prose at a 65 character measure, a sticky state strip, contents, previous and next, live updates over server-sent events, a "Write a chapter now" button for the live game, and "Download book", which is the same export as the CLI.
+A chapter is due on a dramatic event (a death, a raid, a fire, a lover, a lost limb, someone joining or leaving), on a finished in-game day with at least `min_events` notable events, after `max_hours_between` in-game hours, as an opening when a colony is first seen, and as a closing chapter with an epitaph when every colonist is gone or the game is left; never more often than `min_real_seconds_between` real seconds. A game is identified by its world seed plus its start tick, so a new game opens a new book and a reloaded save resumes the old one. Books are titled by the settlement's name.
 
 ## Configuration
 
-`config.yaml` ships with generic localhost defaults. Put private values in `config.local.yaml` (gitignored); it is deep-merged on top.
+`config.yaml` ships with generic localhost defaults. Put private values in `config.local.yaml` (gitignored); it is deep-merged on top, and the Settings page writes to it. Changes from the Settings page apply immediately.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `bridge.url` | `http://127.0.0.1:8765` | RimBridge base URL |
 | `bridge.poll_seconds` | `2` | ledger poll interval |
-| `bridge.state_refresh_seconds` | `20` | how often `state.summary` and the roster are refreshed |
-| `bridge.timeout_s` | `15` | HTTP timeout for bridge calls |
-| `llm.base_url` | `http://127.0.0.1:8000/v1` | OpenAI-compatible chat endpoint with vision |
-| `llm.model` | `Qwen/Qwen3-VL-32B` | model name sent to the endpoint |
-| `llm.api_key` | `not-needed` | bearer token, if the endpoint wants one |
-| `llm.timeout_s` | `240` | request timeout |
-| `llm.max_tokens` | `1200` | completion budget per chapter |
-| `llm.temperature` | `0.7` | sampling temperature |
-| `llm.disable_thinking` | `true` | sends `chat_template_kwargs.enable_thinking=false` (Qwen-style servers ignore it harmlessly otherwise) |
-| `narrator.min_events` | `4` | events a finished day needs to earn a chapter |
-| `narrator.max_hours_between` | `24` | in-game hours before a chapter is written regardless |
-| `narrator.min_real_seconds_between` | `120` | real-time floor between chapters |
+| `bridge.state_refresh_seconds` | `20` | how often the colony state and roster are refreshed |
+| `llm.base_url`, `llm.model`, `llm.api_key` | localhost, `Qwen/Qwen3-VL-32B`, `not-needed` | the OpenAI-compatible endpoint with vision |
+| `llm.max_tokens`, `llm.temperature`, `llm.timeout_s` | `1200`, `0.7`, `240` | per-chapter budget (voices set their own temperature) |
+| `llm.disable_thinking` | `true` | sends `chat_template_kwargs.enable_thinking=false` (Qwen-style servers) |
+| `narrator.voice` | `chronicler` | default voice; a chronicle can override it |
+| `narrator.custom_prompt`, `narrator.directive` | `""` | the Custom voice's prompt; an author's directive for every chapter |
+| `narrator.min_events`, `max_hours_between`, `min_real_seconds_between` | `4`, `24`, `120` | cadence |
 | `narrator.opening_chapter` | `true` | write an introduction when a colony is first seen |
-| `narrator.base_width_cells` | `50` | width of the wide shot of the base |
-| `narrator.event_width_cells` | `30` | width of the close shot of the event |
-| `narrator.label_anchors` | `false` | draw anchor names (from `anchor.list`) on the pictures |
-| `narrator.grid` | `false` | draw a faint 10-cell grid on the pictures |
-| `overseer.enabled` | `true` | quote an agent's notes if its dashboard is up |
-| `overseer.url` | `http://127.0.0.1:8770` | the agent dashboard |
-| `overseer.poll_seconds` | `5` | how often it is polled |
+| `narrator.moments_per_chapter` | `3` | camera moments attached besides the wide shot |
+| `narrator.saga_every` | `8` | fold older chapter summaries into the story so far every N chapters |
+| `narrator.dossier_colonists` | `12` | colonists described in full; the rest get one line |
+| `narrator.base_width_cells`, `event_width_cells` | `50`, `30` | the wide shot and the fallback event shot |
+| `camera.moments`, `follow_fight`, `daily`, `portraits` | `true` | what the camera shoots |
+| `camera.max_per_chapter`, `debounce_seconds` | `8`, `10` | how often |
+| `camera.moment_width_cells`, `portrait_width_cells`, `frame_max_px` | `24`, `8`, `1024` | framing |
+| `timeline.state_every_seconds` | `60` | how often a state sample is recorded |
+| `overseer.enabled`, `overseer.url` | `true`, `http://127.0.0.1:8770` | quote an agent's notes if its dashboard is up |
 | `web.host`, `web.port` | `127.0.0.1`, `8771` | where the reader is served |
 | `storage.dir` | `chronicles` | where chronicles are written (relative to the project) |
 
-Set `RIMCHRONICLE_HOME` to run against a different project directory (config and chronicles are looked up there).
+Set `RIMCHRONICLE_HOME` to run against a different project directory (config and chronicles are looked up there); that is also how to write test chapters without touching your real book.
 
 ## Layout
 
 ```
 rimchronicle/
   bridge.py     HTTP client for RimBridge
-  watcher.py    ledger polling, notable events, colony state, game identity
-  narrator.py   cadence rules, prompt, model call, parsing
+  watcher.py    ledger polling, notable events, colony state, game identity, the timeline tap
+  camera.py     moments, fight follow-ups, daily wide shots, portraits
+  people.py     colonist dossiers and arcs (people.json)
+  timeline.py   the session record (timeline.jsonl)
+  voices.py     the narrator voices and the shared core rules
+  narrator.py   cadence, the prompt, the model call, parsing, rewriting, the saga rollup
   overseer.py   optional agent notes from a dashboard
-  store.py      chronicle.json, chronicle.md, images
-  export.py     single-file HTML book
-  engine.py     one loop that ties it together plus an event hub
+  store.py      chronicle.json, chronicle.md, images and frames
+  export.py     single-file HTML book with the people and a contact sheet of days
+  engine.py     one loop that ties it together, settings that apply live, an event hub
   web.py        FastAPI routes and SSE
-  webpage.py    the single-page reader (inline CSS and JS)
-  cli.py        serve, once, export, list
+  static/       the reader: library, reader, people, timeline, settings (no build step)
+  cli.py        serve, once, rewrite, voices, export, list
 tests/          fake bridge, fake narrator, fast tests
 ```
 

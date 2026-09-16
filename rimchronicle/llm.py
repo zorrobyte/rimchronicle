@@ -18,7 +18,7 @@ class Reply:
 
 
 class ChatLike(Protocol):
-    def chat(self, messages: list[dict[str, Any]], max_tokens: int | None = None) -> Reply: ...
+    def chat(self, messages: list[dict[str, Any]], max_tokens: int | None = None, temperature: float | None = None) -> Reply: ...
 
 
 class LLM:
@@ -31,12 +31,12 @@ class LLM:
         self.disable_thinking = bool(cfg.get("disable_thinking", True))
         self.client = OpenAI(base_url=cfg["base_url"], api_key=cfg.get("api_key") or "not-needed", timeout=float(cfg.get("timeout_s", 240)), max_retries=0)
 
-    def chat(self, messages: list[dict[str, Any]], max_tokens: int | None = None) -> Reply:
+    def chat(self, messages: list[dict[str, Any]], max_tokens: int | None = None, temperature: float | None = None) -> Reply:
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "max_tokens": max_tokens or self.max_tokens,
-            "temperature": self.temperature,
+            "temperature": self.temperature if temperature is None else float(temperature),
         }
         if self.disable_thinking:
             kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}

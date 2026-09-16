@@ -78,6 +78,14 @@ class Bridge:
         except BridgeError:
             return None
 
+    def pawn_detail(self, pawn: str) -> dict[str, Any] | None:
+        """Full pawn detail (traits, backstory, thoughts, relations...). None if the bridge lacks it."""
+        try:
+            v = self.rpc("state.pawn", {"pawn": pawn})
+            return v if isinstance(v, dict) else None
+        except BridgeError:
+            return None
+
     def game_start_tick(self) -> int | None:
         """Absolute tick the game world started at; constant across saves of the same game."""
         try:
